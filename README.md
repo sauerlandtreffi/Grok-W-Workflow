@@ -84,6 +84,35 @@ ORCHESTRATOR verifies: open the files, run the proof command itself.
 numTurns==1 ⇒ fabricated ⇒ corrective round via resumeSessionId (max 2, then stop delegating)
 ```
 
+### The same map, agents only
+
+```
+ORCHESTRATOR — the invoking session (Claude, Codex, …)
+owns goal, specs, every judgement, integration
+   │
+   │ Shapes 1+2 · drives Grok directly
+   ├──► GROK WORKER ×≤10 · grok-4.6 @ xhigh
+   │       reads / implements frozen specs / runs scoped commands — never judges own work
+   │       └─ writer ──after──► GROK BLIND VERIFIER
+   │                            sees only disk state + proof command, never the writer's output
+   │
+   │ Shape 3 · fanout pipeline — one delegation layer in between
+   │           (every thinking agent inherits the session's model; every Grok is pinned)
+   ├──► PLANNER               decomposes the goal into frozen, disjoint specs
+   ├──► SPEC REVIEWER         adversarial: hunts ambiguity before anything is dispatched
+   ├──► WORKER ×1 per item    dispatches and judges its item — never types the code itself
+   │       ├──► GROK WRITER          implements the spec
+   │       ├──► GROK BLIND VERIFIER  blind, as above
+   │       └── runs the proof command itself · resume loop ≤2 rounds
+   ├──► INDEPENDENT REVIEWER  gets spec + real diff, never the worker's self-report
+   │
+   └── integrates accepted items itself · failed items are re-planned (≤2 rounds)
+```
+
+The blindness lines are the design: Grok never judges its own work, the verifier never
+sees the writer's claims, the reviewer never sees the worker's report. Labour is always
+`grok-4.6` at `xhigh`; judgement always runs at the orchestrator's own level.
+
 ## Install
 
 Requires the Grok Build CLI (`npm i -g @xai-official/grok`, then `grok login`), Node.js, and Windows PowerShell 5.1 or later.
