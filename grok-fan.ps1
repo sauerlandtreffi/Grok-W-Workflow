@@ -1,73 +1,16 @@
 <#
 .SYNOPSIS
-  Grok-W dispatch runner: executes a dependency-ordered batch of Grok Build tasks in parallel.
+  Grok-W dispatch runner (Windows-native fallback; the primary runner is grok-fan.mjs).
 
 .DESCRIPTION
-  Reads a JSON task array, launches up to -MaxParallel `grok` processes concurrently,
-  honours per-task dependencies ("after"), and writes one result file per task plus a
-  machine-readable _summary.json.
-
-  Designed to be driven by an orchestrator -- whichever agent is running the workflow,
-  the model does not matter -- that plans the tasks, reviews the results and owns all
-  final judgement. Grok subagents are stateless workers: every prompt must be fully
-  self-contained.
-
-  "after" exists so one task file can hold a whole build round: a WRITER task that
-  implements an item, and a blind VERIFIER task that runs afterwards and judges the
-  result from disk state and a proof command. The runner never feeds a dependency's
-  output into a dependent prompt -- that blindness is the point. A verifier that is
-  shown the writer's own claims is not a verifier.
-
-  Three measured facts drive this script's defaults -- see SKILL.md "Measured behaviour":
-
-  1. --permission-mode auto is REQUIRED for any task that writes or runs commands.
-     Under 'dontAsk', 'default' or 'acceptEdits', grok CANCELS the tool call: the
-     session ends at turn 1 with stopReason "cancelled", exit code 0 and no stderr,
-     so a write task reports success while nothing reached the disk. Writing modes
-     are rejected up front unless the mode is 'auto'.
-  2. numTurns == 1 on a task that needed a tool call means the answer was fabricated.
-     grok-4.6 will invent schema-valid results rather than call a tool when the answer
-     looks knowable. Those are flagged suspectNoToolCall.
-  3. max-turns exits 1 with stderr "max turns reached" and reports stopReason
-     "cancelled", never "max_turns" -- detected here via the stderr marker, and the
-     payload is still parsed so its cost is counted.
-
-  MODEL AND EFFORT ARE FIXED: grok-4.6 at xhigh, always. This is a standing
-  instruction, not a default. 'xhigh' is confirmed to be the top of grok's ladder --
-  the CLI rejects anything higher with "unknown effort level 'max'; use one of:
-  xhigh, high, medium, low". The -Model and -Effort parameters accept only those two
-  values so a wrong call fails loudly, and per-task 'model'/'effort' overrides in a
-  task file are refused rather than silently applied.
-
-.PARAMETER TasksFile
-  Path to a JSON file containing an array of task objects. Fields:
-    id              (string, required)  unique, filename-safe
-    prompt          (string, required)  fully self-contained instruction
-    cwd             (string)            working dir for the subagent (default: -DefaultCwd)
-    mode            (string)            read | write | shell | full   (default: read)
-    after           (string|string[])   task id(s) that must finish before this one starts
-    afterAny        (bool)              run even if a dependency did not end 'ok'
-    maxTurns        (int)               default: 40 for read, 80 otherwise
-    schema          (object)            JSON Schema -> forces structured JSON output
-    tools           (string)            explicit comma-separated tool allowlist (overrides mode)
-    rules           (string)            extra system-prompt rules
-    permissionMode  (string)            overrides -PermissionMode for this task
-    resumeSessionId (string)            resume that grok session instead of starting fresh
-    continueSession (bool)              resume the most recent session for this cwd
-    allowSubagents  (bool)              let Grok spawn its own subagents (default: false)
-
-.PARAMETER OutDir
-  Directory for results. Created if missing. Defaults to a timestamped dir under
-  $env:TEMP\grok-w\.
-
-.PARAMETER PermissionMode
-  Wave-wide grok permission mode. Default 'auto' -- the only mode in which write,
-  search_replace and run_terminal_command actually execute. 'dontAsk' is accepted for
-  waves of pure read tasks, where it makes an accidental write a no-op; it fails
-  SILENTLY, so it is refused for write/shell/full tasks.
+  Runs a dependency-ordered JSON array of Grok Build CLI tasks in parallel and writes
+  one result file per task plus _summary.json. Doctrine, task-file contract and the
+  measured Grok behaviour behind the defaults: see SKILL.md next to this file.
+  Model and effort are pinned (grok-4.6 at xhigh); per-task overrides are refused,
+  and writing modes are refused unless the permission mode is 'auto'.
 
 .EXAMPLE
-  .\grok-fan.ps1 -TasksFile .\round1.json -OutDir D:\tmp\r1 -MaxParallel 10
+  .\grok-fan.ps1 -TasksFile .\wave.json -OutDir .\wave-out -DefaultCwd D:\repo -MaxParallel 10
 #>
 [CmdletBinding()]
 param(
@@ -433,8 +376,7 @@ while ($pending.Count -gt 0 -or $running.Count -gt 0) {
     $running = $stillRunning
 }
 
-# Count every dollar grok reported, including failed and truncated tasks --
-# they cost real money even when their output is unusable.
+# Totals include failed and truncated tasks.
 $totalCost = 0.0
 foreach ($v in $results.Values) { if ($v.costUSD) { $totalCost += [double]$v.costUSD } }
 
@@ -455,7 +397,7 @@ $summaryPath = Join-Path $OutDir '_summary.json'
 $summary | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $summaryPath -Encoding UTF8
 
 Write-Host ""
-Write-Host "grok-w: done in $($summary.totalSeconds)s -- $($summary.ok) ok, $($summary.failed) failed, $($summary.suspect) suspect, `$$($summary.totalCostUSD)"
+Write-Host "grok-w: done in $($summary.totalSeconds)s -- $($summary.ok) ok, $($summary.failed) failed, $($summary.suspect) suspect"
 Write-Host "grok-w: summary -> $summaryPath"
 foreach ($v in $summary.tasks) {
     if ($v.status -ne 'ok') { Write-Host "grok-w: NEEDS ATTENTION [$($v.id)] status=$($v.status) stopReason=$($v.stopReason)" }

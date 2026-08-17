@@ -1,6 +1,6 @@
 ---
 name: grok-w
-description: Grok-W — Grok Build CLI subagents do the labour (always grok-4.6 at xhigh, never another model or effort) while the invoking agent orchestrates and owns every judgement. Use whenever the user's message contains "Grok-W", "grok-w", "GrokW" or "/grok-w", in any casing, anywhere in the message. Shapes: single call, parallel wave of up to 10 tasks via grok-fan.mjs, or the grok-fanout pipeline (Workflow tool).
+description: Grok Build CLI subagents do the labour (pinned grok-4.6 at xhigh); the invoking agent orchestrates and owns every judgement. Use whenever the user's message contains "Grok-W", "grok-w", "GrokW" or "/grok-w", any casing, anywhere. Shapes: single call, wave of up to 10 tasks via grok-fan.mjs, or the grok-fanout pipeline (Workflow tool).
 ---
 
 # Grok-W — orchestrated Grok fan-out
@@ -32,7 +32,7 @@ wave.json = [ { id, prompt, mode: read|write|shell|full, cwd, after, afterAny,
 grok-fan.mjs — ≤10 parallel `grok` processes, honours `after`, enforces auto + model pin
   │            writer (mode full) ──after──► blind verifier (never sees writer's output)
   ▼
-outdir/  _summary.json   status, numTurns, suspectNoToolCall, sessionId, costUSD — read FIRST
+outdir/  _summary.json   status, numTurns, suspectNoToolCall, sessionId — read FIRST
          <id>.json       structuredOutput = the only field you may parse
          <id>.err.txt    _prompts/<id>.txt
   │
@@ -46,7 +46,7 @@ numTurns==1 ⇒ fabricated ⇒ corrective round via resumeSessionId (max 2, then
 1. **`--permission-mode auto` is mandatory** for anything that writes or runs commands. Every other mode *cancels* the tool call silently (turn 1, exit 0, no stderr) while the task reports success. The runner refuses `write`/`shell`/`full` under any other mode.
 2. **Fabrication is real; `numTurns == 1` is the tell.** Grok invents schema-valid answers rather than call a tool. `status: ok` and a populated `structuredOutput` carry no information; the runner flags this as `suspectNoToolCall`. Defence: ask for what cannot be guessed — exact line numbers, exact strings, real command output.
 3. **Parse `structuredOutput` only.** `text` concatenates every turn, including tool calls pressed through the schema.
-4. **max-turns = exit 1 + stderr `max turns reached`**, stopReason stays `cancelled`; the payload still parses → status `truncated`, cost counted.
+4. **max-turns = exit 1 + stderr `max turns reached`**, stopReason stays `cancelled`; the payload still parses → status `truncated`.
 5. **Unknown names in `--tools` are silently ignored** — a typo looks like model failure.
 6. **Resume works headless**: `resumeSessionId` keeps the session's context, so a corrective round states only what is wrong.
 7. **`xhigh` is the top of the effort ladder** — anything higher fails the run outright, no fallback.
@@ -68,7 +68,7 @@ Standing instruction, enforced by the runner: `--model`/`--effort` accept only t
 
 ## Protocol
 
-Scope (goal + acceptance in 2–3 lines) → decompose (≤10 disjoint units; every implementation unit gets a proof command that **fails loudly on an empty diff**) → announce the wave (id, mode, one-line intent) → one runner call per wave (the runner parallelizes — never fan out at your own tool level) → triage `_summary.json` → verify substance yourself → integrate, report rejects and `totalCostUSD`.
+Scope (goal + acceptance in 2–3 lines) → decompose (≤10 disjoint units; every implementation unit gets a proof command that **fails loudly on an empty diff**) → announce the wave (id, mode, one-line intent) → one runner call per wave (the runner parallelizes — never fan out at your own tool level) → triage `_summary.json` → verify substance yourself → integrate and report what you rejected and why.
 
 For review-shaped jobs slice by **dimension** (correctness, performance, API contract, test coverage), not by file, each with a schema.
 
@@ -146,4 +146,3 @@ args: `goal` (required) · `repo` ('.') · `maxWorkers` (6, cap 10) · `maxRound
 - `grok --worktree` does nothing in headless mode; isolation comes from Workflow worktrees or disjoint file partitioning.
 - Grok Build reads the Claude `settings.json` for permissions and inherits its MCP servers.
 - Copies of this skill (per-harness installs, repo) must stay in step; source of truth: github.com/sauerlandtreffi/grok-w.
-- Cost is not the constraint (~$0.002–0.02 per small task; a 10-task wave lands well under $0.50) — still report `totalCostUSD` from `_summary.json`.

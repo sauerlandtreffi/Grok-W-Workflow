@@ -1,45 +1,18 @@
 ﻿export const meta = {
   name: 'grok-fanout',
-  description: 'Grok-W fan-out: the orchestrator freezes specs, Grok Build CLI subagents (grok-4.6 at xhigh) do the implementation work in parallel, every item is judged by a structurally blind Grok verifier plus an independent diff review, and failures are re-planned.',
+  description: 'Plan, harden specs, then per item: Grok writer + blind Grok verifier, and an independent diff review.',
   phases: [
-    { title: 'Plan', detail: 'orchestrator decomposes the goal into disjoint, frozen work items with proof commands' },
-    { title: 'Spec', detail: 'adversarial spec pass — hunt ambiguity BEFORE Grok acts on it (Grok has zero context and will invent)' },
-    { title: 'Build', detail: 'per item: Grok writer + structurally blind Grok verifier, resume loop, isolated worktree' },
-    { title: 'Review', detail: 'independent diff review per item — reads the real diff, not the worker\'s claims' },
+    { title: 'Plan', detail: 'decompose into frozen, disjoint items' },
+    { title: 'Spec', detail: 'hunt ambiguity before dispatch' },
+    { title: 'Build', detail: 'Grok writer + blind verifier per item' },
+    { title: 'Review', detail: 'independent diff review per item' },
   ],
 }
 
 // ============================================================================
 // grok-fanout — Grok does the work, the orchestrator does the thinking.
-//
-//   Orchestrator — whichever agent invoked this workflow; the model does not matter
-//        |  plan, then harden the specs
-//        |  fan out
-//        v
-//   Item 1 / Item 2 / Item 3 ...   each item:
-//        Grok WRITER   (grok-fan.ps1, mode full, --permission-mode auto)
-//        Grok VERIFIER (same wave, "after" the writer, mode shell, BLIND)
-//        proof command re-run by the worker itself
-//        resume loop on failure
-//        |
-//        v
-//   Independent diff review (fresh agent, reads git diff, never the worker's claims)
-//        |
-//        v
-//   Integrate — the calling session merges deliberately.
-//
-// Two gates exist because of what Grok measurably is (see SKILL.md): it emits
-// schema-valid success reports for work it never performed, with stopReason
-// "end_turn" and numTurns 1.
-//
-//   1. A structurally BLIND Grok verifier. It runs after the writer, in the same
-//      worktree, and is never shown the writer's output — the runner does not feed
-//      a dependency's result into a dependent prompt. It judges disk state and the
-//      proof command only.
-//   2. An independent diff review by a fresh agent that receives the SPEC and the
-//      DIFF, and deliberately not the worker's self-report.
-//
-// Everything mechanical is Grok's. Everything that is a judgement stays above it.
+// Doctrine and the measured Grok behaviour behind the two gates (blind verifier,
+// independent diff review): see SKILL.md.
 //
 // Invoke:
 //   Workflow({ scriptPath: '<skill dir>/grok-fanout.js',
@@ -47,17 +20,14 @@
 //
 //   goal        (required) what to build / fix / refactor
 //   repo        (default '.') repo root, relative to the session cwd
-//   runner      absolute path to grok-fan.mjs. Required unless you filled in
-//               RUNNER_DEFAULT below when you installed the skill.
-//   maxWorkers  (default 6, cap 10) items per round — the runner throttles Grok at 10
-//   maxRounds   (default 2) re-plan + re-dispatch rounds for failed items
-//   isolation   'worktree' (default) or 'none'. 'none' is REQUIRED when the session
-//               cwd is not a git repo — items then rely on disjoint "touches".
-//   specReview  (default true) run the adversarial spec pass
+//   runner      absolute path to grok-fan.mjs (or fill in RUNNER_DEFAULT below)
+//   maxWorkers  (default 6, cap 10) items per round
+//   maxRounds   (default 2) re-plan rounds for failed items
+//   isolation   'worktree' (default) | 'none' — 'none' REQUIRED outside a git repo
+//   specReview  (default true) adversarial spec pass
 //
-// There is deliberately no argument for who orchestrates: the planning, spec and
-// review agents inherit the calling session's model. Whoever runs the workflow
-// orchestrates it.
+// No argument selects who orchestrates: thinking agents inherit the calling
+// session's model; Grok is pinned.
 // ============================================================================
 
 // ---- install setting ------------------------------------------------------
@@ -103,27 +73,27 @@ const PLAN_SCHEMA = {
   properties: {
     items: {
       type: 'array',
-      description: 'Independent work items, buildable in parallel WITHOUT touching the same files.',
+      description: 'Disjoint work items, buildable in parallel without touching the same files.',
       items: {
         type: 'object',
         required: ['id', 'title', 'spec', 'proof', 'touches'],
         properties: {
-          id: { type: 'string', description: 'short kebab-case id, filename-safe, e.g. "wallet-hook"' },
+          id: { type: 'string', description: 'short kebab-case id, filename-safe' },
           title: { type: 'string' },
           spec: {
             type: 'string',
-            description: 'Frozen, self-contained work order for a ZERO-CONTEXT implementer that cannot ask questions: goal, exact absolute paths, what to read first, constraints ("do not touch X"), non-goals, and the exact output shape. Anything left implicit will be invented.',
+            description: 'Frozen, self-contained work order for a zero-context implementer that cannot ask questions: goal, exact absolute paths, what to read first, constraints, non-goals, output shape. Anything implicit will be invented.',
           },
           proof: {
             type: 'string',
-            description: 'Exact shell command that PROVES the item is done (focused test / typecheck / build). Must be runnable from the repo root and must fail loudly when the work is wrong.',
+            description: 'Exact shell command, runnable from the repo root, that proves the item is done and fails loudly when the work is wrong.',
           },
-          touches: { type: 'array', items: { type: 'string' }, description: 'Files/dirs this item will modify — used to guarantee disjoint items.' },
-          needsShell: { type: 'boolean', description: 'True if the implementer must run commands (tests, generators) and not just edit files.' },
+          touches: { type: 'array', items: { type: 'string' }, description: 'Files/dirs this item will modify — items must stay disjoint.' },
+          needsShell: { type: 'boolean', description: 'True if the implementer must run commands.' },
         },
       },
     },
-    conflictNote: { type: 'string', description: 'If the goal is NOT cleanly parallelizable, explain and return a single item.' },
+    conflictNote: { type: 'string', description: 'If not cleanly parallelizable, explain and return a single item.' },
   },
 }
 
@@ -139,14 +109,13 @@ const WORKER_SCHEMA = {
       description: 'pass ONLY if YOU ran the proof command and saw it green, AND the changes are really on disk.',
     },
     summary: { type: 'string' },
-    filesChanged: { type: 'array', items: { type: 'string' }, description: 'From git status / git diff --name-only — observed, not claimed by Grok.' },
-    proofOutput: { type: 'string', description: 'Tail of the proof command output as YOU ran it. Evidence, not a claim.' },
-    blindVerifierVerdict: { type: 'string', description: 'What the blind Grok verifier concluded, verbatim.' },
-    grokTurns: { type: 'number', description: 'numTurns of the Grok writer run from _summary.json. 1 means it never called a tool.' },
-    suspectFabrication: { type: 'boolean', description: 'True if the runner flagged suspectNoToolCall, or Grok claimed changes that were not on disk.' },
-    rounds: { type: 'number', description: 'Grok resume rounds used.' },
+    filesChanged: { type: 'array', items: { type: 'string' }, description: 'From git status/diff — observed, not claimed.' },
+    proofOutput: { type: 'string', description: 'Tail of the proof output as YOU ran it.' },
+    blindVerifierVerdict: { type: 'string', description: 'The blind verifier conclusion, verbatim.' },
+    grokTurns: { type: 'number', description: 'numTurns of the writer from _summary.json; 1 = no tool call.' },
+    suspectFabrication: { type: 'boolean', description: 'True if suspectNoToolCall was flagged or claims did not match disk.' },
+    rounds: { type: 'number', description: 'Resume rounds used.' },
     branch: { type: 'string' },
-    grokCostUSD: { type: 'number' },
     notes: { type: 'string' },
   },
 }
@@ -327,8 +296,7 @@ const workerPrompt = (item, round) => [
   `## Report`,
   ``,
   `verdict "pass" ONLY if you ran the proof command and saw it green AND the changes are really on disk.`,
-  `Include the proof output as evidence, the blind verifier's verdict verbatim, grokTurns, and`,
-  `grokCostUSD from _summary.json totalCostUSD.`,
+  `Include the proof output as evidence, the blind verifier's verdict verbatim, and grokTurns.`,
   ``,
   `================ WORK ITEM ${item.id} — ${item.title} ================`,
   round > 1 ? `(re-planned, round ${round})` : '',
@@ -447,9 +415,7 @@ for (let round = 1; round <= maxRounds; round++) {
   else log(`Round ${round}: ${carry.length} item(s) still unresolved after ${maxRounds} round(s).`)
 }
 
-const grokSpend = accepted.reduce((s, r) => s + (r.worker && r.worker.grokCostUSD ? r.worker.grokCostUSD : 0), 0)
-
-log(`grok-fanout done: ${accepted.length} accepted, ${carry.length} unresolved. Grok spend on accepted items: $${grokSpend.toFixed(4)}`)
+log(`grok-fanout done: ${accepted.length} accepted, ${carry.length} unresolved.`)
 
 return {
   goal,

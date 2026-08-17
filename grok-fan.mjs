@@ -1,37 +1,17 @@
 #!/usr/bin/env node
 // ============================================================================
 // grok-fan.mjs — Grok-W dispatch runner. Cross-platform: Linux, macOS, Windows.
-//
-// Executes a dependency-ordered batch of Grok Build CLI tasks in parallel and
-// writes one result file per task plus a machine-readable _summary.json.
-// Faithful port of grok-fan.ps1 (the Windows-native original): same task-file
-// contract, same statuses, same summary shape, same enforcement.
-//
-// Driven by an orchestrator — whichever agent invoked the Grok-W skill — that
-// plans the tasks, reviews the results and owns all judgement. Grok subagents
-// are stateless workers: every prompt must be fully self-contained.
-//
-// Three measured facts drive the defaults (see SKILL.md "Measured behaviour"):
-//   1. --permission-mode auto is REQUIRED for any task that writes or runs
-//      commands. Every other mode cancels the tool call silently (turn 1,
-//      exit 0, no stderr) while the task reports success. Writing modes are
-//      refused up front unless the effective mode is 'auto'.
-//   2. numTurns == 1 on a task that needed a tool call means the answer was
-//      fabricated. Flagged as suspectNoToolCall.
-//   3. max-turns is exit 1 + stderr "max turns reached", stopReason stays
-//      "cancelled". Detected via the stderr marker; the payload still parses,
-//      so its cost is counted and the status is 'truncated'.
-//
-// MODEL AND EFFORT ARE FIXED: grok-4.6 at xhigh, always. --model/--effort
-// accept only those values, and per-task model/effort fields are refused.
+// Runs a dependency-ordered JSON array of Grok Build CLI tasks in parallel and
+// writes one result file per task plus _summary.json. Doctrine, task-file
+// contract and the measured Grok behaviour behind the defaults: see SKILL.md.
+// Model and effort are pinned (grok-4.6 at xhigh); per-task overrides are
+// refused, and writing modes are refused unless the permission mode is 'auto'.
 //
 // Usage:
 //   node grok-fan.mjs --tasks-file wave.json --out-dir wave-out \
 //        [--default-cwd DIR] [--max-parallel 10] [--permission-mode auto] \
 //        [--timeout-sec 1800] [--dry-run]
-//
-// The grok entrypoint is auto-resolved (PATH symlink on POSIX, npm dirs on
-// Windows, `npm prefix -g` as fallback); override with env GROK_ENTRY.
+// Env GROK_ENTRY overrides the grok-binary auto-detection.
 // ============================================================================
 import { spawn, execSync, spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
@@ -344,8 +324,7 @@ while (pending.length > 0 || running.size > 0) {
   else if (pending.length > 0 && !progress) fail(`scheduler stalled with ${pending.length} task(s) pending and nothing running. Check the 'after' fields.`)
 }
 
-// Count every dollar grok reported, including failed and truncated tasks —
-// they cost real money even when their output is unusable.
+// Totals include failed and truncated tasks.
 const totalCost = Object.values(results).reduce((s, r) => s + (r.costUSD ? Number(r.costUSD) : 0), 0)
 const summary = {
   outDir: opts.outDir, model: opts.model, effort: opts.effort,
@@ -361,7 +340,7 @@ const summaryPath = path.join(opts.outDir, '_summary.json')
 writeFileSync(summaryPath, JSON.stringify(summary, null, 2), 'utf8')
 
 console.log('')
-console.log(`grok-w: done in ${summary.totalSeconds}s -- ${summary.ok} ok, ${summary.failed} failed, ${summary.suspect} suspect, $${summary.totalCostUSD}`)
+console.log(`grok-w: done in ${summary.totalSeconds}s -- ${summary.ok} ok, ${summary.failed} failed, ${summary.suspect} suspect`)
 console.log(`grok-w: summary -> ${summaryPath}`)
 for (const r of summary.tasks) {
   if (r.status !== 'ok') console.log(`grok-w: NEEDS ATTENTION [${r.id}] status=${r.status} stopReason=${r.stopReason}`)
