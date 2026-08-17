@@ -4,6 +4,19 @@ An agent skill for delegating bulk work to [Grok Build CLI](https://www.npmjs.co
 
 It is built around one measured fact: **Grok will report success for work it never performed.** Not occasionally, and not in a way that looks like failure. So this is not a thin fan-out wrapper. The verification is the product.
 
+## You are an agent and were just handed this link
+
+Then you are meant to be the **orchestrator**. Do this, in order:
+
+1. **Check the prerequisites**: Node ≥ 18 and the Grok Build CLI — `npm i -g @xai-official/grok`, then `grok login` (once, interactive). Works the same on Linux, macOS and Windows.
+2. **Get the files**: `git clone https://github.com/sauerlandtreffi/grok-w` — or copy the directory into your harness's skills folder (e.g. `~/.claude/skills/grok-w/`) to install it as a skill.
+3. **Read `SKILL.md` in full.** It is the operating doctrine — the map, the hard rules, the task-file contract, the verification protocol. This README is background and evidence.
+4. **Dispatch a wave**: write a JSON task file (start from `examples/`), then run
+   `node grok-fan.mjs --tasks-file wave.json --out-dir wave-out --default-cwd /path/to/project`.
+5. **Verify before you believe**: read `wave-out/_summary.json` first; a task with `suspectNoToolCall: true` (or `numTurns: 1` where a tool call was needed) is fabricated until you prove otherwise, and every claim you act on must be checked against the real files by you.
+
+The model and effort are pinned — `grok-4.6` at `xhigh`, enforced by the runner. There is nothing to configure and nothing to choose.
+
 ## Why the verification matters
 
 While testing a naive fan-out, 22 tasks were run against real files and real disk state. What came back:
@@ -41,7 +54,8 @@ Verified against `grok 1.0.4` / `grok-4.6` on Windows.
 | File | |
 |---|---|
 | `SKILL.md` | The doctrine an agent reads: what to delegate, how to write a prompt a zero-context model cannot misread, how to verify, and the full task-file contract. |
-| `grok-fan.ps1` | The dispatch runner. Runs a JSON array of tasks in parallel with a concurrency throttle, honours `after` dependencies, and writes a machine-readable `_summary.json`. |
+| `grok-fan.mjs` | **The dispatch runner** — plain Node, runs everywhere the Grok CLI does (Linux, macOS, Windows). Runs a JSON array of tasks in parallel with a concurrency throttle, honours `after` dependencies, and writes a machine-readable `_summary.json`. |
+| `grok-fan.ps1` | The original Windows-native runner (PowerShell 5.1+). Same task contract, same summary, same enforcement — kept as a fallback for machines where Node scripts are unwelcome. |
 | `grok-fanout.js` | An optional pipeline for implementation work: plan → harden specs → per item (Grok writer + blind Grok verifier + proof command) → independent diff review → integrate. Needs a harness with a `Workflow` tool. |
 | `examples/` | Two working task files: a schema-driven audit wave, and the writer + blind-verifier pattern. |
 
@@ -72,7 +86,7 @@ wave.json = [ { id, prompt, mode: read|write|shell|full, cwd, after, afterAny,
                 schema, maxTurns, resumeSessionId, … } ]
   │
   ▼
-grok-fan.ps1 — ≤10 parallel `grok` processes, honours `after`, enforces auto + model pin
+grok-fan.mjs — ≤10 parallel `grok` processes, honours `after`, enforces auto + model pin
   │            writer (mode full) ──after──► blind verifier (never sees writer's output)
   ▼
 outdir/  _summary.json   status, numTurns, suspectNoToolCall, sessionId, costUSD — read FIRST
@@ -102,7 +116,7 @@ numTurns==1 ⇒ fabricated ⇒ corrective round via resumeSessionId (max 2, then
 │
 └───────────────────────────┬────────────────────────────────────────────────
                             │   the ONLY crossing point:
-                            │   wave.json ▼ · results ▲   (grok-fan.ps1, model pinned)
+                            │   wave.json ▼ · results ▲   (grok-fan.mjs, model pinned)
 ┌───────────────────────────┴─ GROK SIDE — grok-4.6 @ xhigh ─────────────────
 │
 │     GROK WRITER / WORKER ×≤10   reads · implements the spec · scoped commands
@@ -119,7 +133,7 @@ the writer's claims, the reviewer never sees the worker's report.
 
 ## Install
 
-Requires the Grok Build CLI (`npm i -g @xai-official/grok`, then `grok login`), Node.js, and Windows PowerShell 5.1 or later.
+Requires Node ≥ 18 and the Grok Build CLI: `npm i -g @xai-official/grok`, then `grok login` (once, interactive).
 
 Copy this directory into your agent harness's skills directory, e.g.:
 
@@ -127,21 +141,25 @@ Copy this directory into your agent harness's skills directory, e.g.:
 ~/.claude/skills/grok-w/
 ```
 
-Then, if you want the fanout pipeline, open `grok-fanout.js` and fill in `RUNNER_DEFAULT` with the absolute path to `grok-fan.ps1` — a `Workflow` script has no filesystem access and cannot discover its own location. You can also pass `args.runner` per invocation instead.
+Then, if you want the fanout pipeline, open `grok-fanout.js` and fill in `RUNNER_DEFAULT` with the absolute path to `grok-fan.mjs` — a `Workflow` script has no filesystem access and cannot discover its own location. You can also pass `args.runner` per invocation instead.
 
 The skill triggers on the word `Grok-W` in any message, in any casing.
 
+### Windows
+
+Nothing changes: `node grok-fan.mjs …` works identically from PowerShell or cmd. The runner spawns the packaged `bin/grok` directly with an argument array and no shell, which sidesteps the two classic Windows traps (the npm shims `grok.cmd`/`grok.ps1` destroy the embedded quotes in `--json-schema`, and piping grok through `2>&1` in PowerShell 5.1 corrupts `$?`). If Node scripts are unwelcome on a machine, `grok-fan.ps1` is the original Windows-native runner with the same contract: `-TasksFile` `-OutDir` `-DefaultCwd` `-MaxParallel` `-PermissionMode` `-TimeoutSec` `-DryRun`.
+
 ## Running a wave
 
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File ".\grok-fan.ps1" `
-  -TasksFile ".\examples\audit-wave.json" `
-  -OutDir    ".\wave-out" `
-  -DefaultCwd "C:\path\to\project" `
-  -MaxParallel 10
+```bash
+node grok-fan.mjs \
+  --tasks-file examples/audit-wave.json \
+  --out-dir wave-out \
+  --default-cwd /path/to/project \
+  --max-parallel 10
 ```
 
-Read `_summary.json` first. Per task it gives `status`, `numTurns`, `suspectNoToolCall`, `sessionId`, `costUSD` and `stopReason`; plus `totalCostUSD` and a `suspect` count for the wave. `-DryRun` prints the exact command lines without spending anything.
+Read `_summary.json` first. Per task it gives `status`, `numTurns`, `suspectNoToolCall`, `sessionId`, `costUSD` and `stopReason`; plus `totalCostUSD` and a `suspect` count for the wave. `--dry-run` prints the exact command lines without spending anything; env `GROK_ENTRY` overrides the grok-binary auto-detection.
 
 A minimal task file:
 
@@ -150,7 +168,7 @@ A minimal task file:
   {
     "id": "null-check-audit",
     "mode": "read",
-    "cwd": "C:\\path\\to\\project",
+    "cwd": "/path/to/project",
     "prompt": "Read src/combat/*.ts. Find every place damage is applied without a null check on the target. Report the file, the 1-based line number, and the exact expression, copied character-for-character.",
     "schema": {
       "type": "object",
@@ -180,7 +198,9 @@ See `SKILL.md` for the full field reference, the tool profiles, and the writer +
 
 ## Status
 
-The runner is tested: every status path, the dependency scheduler, the `auto` enforcement, cost accounting on non-zero exits, resume, and the writer + blind-verifier pattern end-to-end — including the negative case, where a deliberately truncated writer produced no file and the blind verifier returned `fail` with the real `MODULE_NOT_FOUND` output as its evidence.
+The measured findings and the original verification battery were established with `grok-fan.ps1` on Windows: every status path, the dependency scheduler, the `auto` enforcement, cost accounting on non-zero exits, resume, and the writer + blind-verifier pattern end-to-end — including the negative case, where a deliberately truncated writer produced no file and the blind verifier returned `fail` with the real `MODULE_NOT_FOUND` output as its evidence.
+
+`grok-fan.mjs` is a faithful port of that runner (same contract, same statuses, same summary) and was verified live on 2026-08-17: entrypoint auto-detection, `--dry-run` command construction, the `--json-schema` path end-to-end with character-exact results, the dependency scheduler including `skipped` and `afterAny`, BOM-tolerant task files, all three refusal paths (per-task `model`, per-task `effort`, writing mode without `auto`), and exit codes. Its POSIX-specific paths (symlink resolution of the `grok` shim, process-group kill on timeout) follow standard Node behaviour but have not yet been exercised on Linux hardware.
 
 Re-validated live on 2026-08-17: on the very first probe task, Grok pressed its own narration into the schema at turn 1 without reading the target file — the runner flagged it `suspectNoToolCall`, and a corrective round via `resumeSessionId` then returned the character-exact answer at turn 2. The fabrication tell is not a hypothetical.
 

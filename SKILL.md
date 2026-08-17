@@ -1,15 +1,17 @@
 ---
 name: grok-w
-description: Grok-W — Grok Build CLI subagents do the labour (always grok-4.6 at xhigh, never another model or effort) while the invoking agent orchestrates and owns every judgement. Use whenever the user's message contains "Grok-W", "grok-w", "GrokW" or "/grok-w", in any casing, anywhere in the message. Shapes: single call, parallel wave of up to 10 tasks via grok-fan.ps1, or the grok-fanout pipeline (Workflow tool).
+description: Grok-W — Grok Build CLI subagents do the labour (always grok-4.6 at xhigh, never another model or effort) while the invoking agent orchestrates and owns every judgement. Use whenever the user's message contains "Grok-W", "grok-w", "GrokW" or "/grok-w", in any casing, anywhere in the message. Shapes: single call, parallel wave of up to 10 tasks via grok-fan.mjs, or the grok-fanout pipeline (Workflow tool).
 ---
 
 # Grok-W — orchestrated Grok fan-out
+
+**Landed here via the GitHub link?** Then you are meant to be the orchestrator, and this file is your operating manual. Prerequisites: Node ≥ 18 and the Grok Build CLI (`npm i -g @xai-official/grok`, then `grok login` once, interactively). Everything runs through one command — `node grok-fan.mjs` from this directory — identically on Linux, macOS and Windows. Read the Map and the Hard rules, write a task file (working examples in `examples/`), dispatch, verify. Nothing else is required.
 
 **Trigger:** any message containing `Grok-W` (any casing). Typing it *is* the opt-in — run the protocol, don't ask.
 
 **Orchestrator:** whoever invoked this skill — you. You scope, decompose, freeze specs, verify and integrate. Grok subagents read, implement from frozen specs, and run narrowly scoped commands — they never judge their own work. **A Grok result is a proposal, never a fact.** Fan out wide; spend your own intelligence on the spec going in and the diff coming out.
 
-`grok-fan.ps1` (runner) and `grok-fanout.js` (Workflow pipeline) live in this SKILL.md's directory (`<skill dir>` below).
+Files in this directory (`<skill dir>`): `grok-fan.mjs` — the runner, all platforms · `grok-fanout.js` — Workflow pipeline · `grok-fan.ps1` — legacy Windows-native runner (see the Windows section).
 
 ## Map
 
@@ -27,7 +29,7 @@ wave.json = [ { id, prompt, mode: read|write|shell|full, cwd, after, afterAny,
                 schema, maxTurns, resumeSessionId, … } ]
   │
   ▼
-grok-fan.ps1 — ≤10 parallel `grok` processes, honours `after`, enforces auto + model pin
+grok-fan.mjs — ≤10 parallel `grok` processes, honours `after`, enforces auto + model pin
   │            writer (mode full) ──after──► blind verifier (never sees writer's output)
   ▼
 outdir/  _summary.json   status, numTurns, suspectNoToolCall, sessionId, costUSD — read FIRST
@@ -51,7 +53,7 @@ numTurns==1 ⇒ fabricated ⇒ corrective round via resumeSessionId (max 2, then
 
 ## The worker is fixed: grok-4.6 at xhigh
 
-Standing instruction, enforced twice: the runner's `-Model`/`-Effort` accept only these values, and per-task `model`/`effort` fields are **refused**. Never downgrade for "cheap mechanical" work.
+Standing instruction, enforced by the runner: `--model`/`--effort` accept only these values, and per-task `model`/`effort` fields are **refused**. Never downgrade for "cheap mechanical" work.
 
 ## Hard rules
 
@@ -74,13 +76,13 @@ Statuses: `ok` (still check `suspectNoToolCall`/`numTurns`) · `truncated` (narr
 
 ## Running a wave
 
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File "<skill dir>\grok-fan.ps1" `
-  -TasksFile "<workdir>\wave1.json" -OutDir "<workdir>\wave1-out" `
-  -DefaultCwd "D:\path\to\project" -MaxParallel 10
+```bash
+node <skill dir>/grok-fan.mjs \
+  --tasks-file wave1.json --out-dir wave1-out \
+  --default-cwd /path/to/project --max-parallel 10
 ```
 
-`-PermissionMode` (default `auto`; `dontAsk` only to harden a pure-read wave) · `-TimeoutSec` (default 1800/task) · `-DryRun` (print command lines, spend nothing). Exit 1 if any task not `ok` — read `_summary.json` regardless.
+Options: `--permission-mode` (default `auto`; `dontAsk` only to harden a pure-read wave) · `--timeout-sec` (default 1800 per task) · `--dry-run` (print the exact command lines, spend nothing) · `--model`/`--effort` (accept only the pinned values — passing them is redundant, passing anything else fails) · env `GROK_ENTRY` overrides the grok-binary auto-detection. Exit 1 if any task did not end `ok` — read `_summary.json` regardless.
 
 ## Task file — a JSON array of task objects
 
@@ -88,7 +90,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "<skill dir>\grok-fan.ps1" `
 |---|---|
 | `id`, `prompt` | required; `id` filename-safe and unique; `prompt` fully self-contained |
 | `mode` | `read` (default) / `write` / `shell` / `full` — pick the narrowest that works |
-| `cwd` | working dir; defaults to `-DefaultCwd` |
+| `cwd` | working dir; defaults to `--default-cwd` |
 | `after`, `afterAny` | dependency id(s); `afterAny: true` runs even if the dependency failed (verifiers) |
 | `maxTurns` | default 40 read / 80 otherwise |
 | `schema` | JSON Schema → forces `structuredOutput` |
@@ -102,9 +104,9 @@ Tool profiles: `read` = `read_file,list_dir,grep` · `write` = + `write,search_r
 
 ```json
 [
-  { "id": "fix",        "mode": "full",  "cwd": "D:\\repo", "prompt": "<frozen spec>" },
-  { "id": "fix-verify", "mode": "shell", "cwd": "D:\\repo", "after": "fix", "afterAny": true,
-    "prompt": "Inspect the working tree of D:\\repo and run: <proof command>. Judge only what you can observe. Report fail if the work is absent, incomplete, or the command does not pass.",
+  { "id": "fix",        "mode": "full",  "cwd": "/repo", "prompt": "<frozen spec>" },
+  { "id": "fix-verify", "mode": "shell", "cwd": "/repo", "after": "fix", "afterAny": true,
+    "prompt": "Inspect the working tree of /repo and run: <proof command>. Judge only what you can observe. Report fail if the work is absent, incomplete, or the command does not pass.",
     "schema": { "type": "object", "required": ["verdict", "evidence"], "properties": {
       "verdict": { "type": "string", "enum": ["pass", "fail"] }, "evidence": { "type": "string" } } } }
 ]
@@ -127,16 +129,20 @@ CONSTRAINTS  stay in your slice; do not run the full test suite; if something is
 ## Shape 3 — fanout pipeline (harness with a `Workflow` tool only)
 
 ```
-Workflow({ scriptPath: '<skill dir>\\grok-fanout.js',
+Workflow({ scriptPath: '<skill dir>/grok-fanout.js',
            args: { goal: '<what to build>', repo: '.', maxWorkers: 6, isolation: 'worktree' } })
 ```
 
-args: `goal` (required) · `repo` ('.') · `maxWorkers` (6, cap 10) · `maxRounds` (2) · `isolation` (`worktree`; **`none` outside a git repo**) · `specReview` (true). No argument selects the orchestrator or the Grok model/effort — thinking agents inherit the calling session, Grok is pinned. `grok-fanout.js` needs `RUNNER_DEFAULT` (or `args.runner`) set to the runner's absolute path. Without a `Workflow` tool, run the equivalent by hand: freeze specs, dispatch writer + blind-verifier waves, review each diff yourself.
+args: `goal` (required) · `repo` ('.') · `maxWorkers` (6, cap 10) · `maxRounds` (2) · `isolation` (`worktree`; **`none` outside a git repo**) · `specReview` (true). No argument selects the orchestrator or the Grok model/effort — thinking agents inherit the calling session, Grok is pinned. `grok-fanout.js` needs `RUNNER_DEFAULT` (or `args.runner`) set to the absolute path of `grok-fan.mjs`. Without a `Workflow` tool, run the equivalent by hand: freeze specs, dispatch writer + blind-verifier waves, review each diff yourself.
+
+## Windows
+
+- `grok-fan.mjs` runs unchanged: `node <skill dir>\grok-fan.mjs --tasks-file wave1.json --out-dir wave1-out --default-cwd D:\path\to\project`. Same flags, same outputs; from PowerShell put it on one line or continue with a backtick.
+- The runner is immune to the two classic Windows traps by construction — it spawns the packaged `bin/grok` directly with an argument array and no shell. If you ever call grok yourself, know them: the npm shims `grok.cmd`/`grok.ps1` re-parse arguments and destroy the embedded quotes in `--json-schema`; and piping grok through `2>&1` in Windows PowerShell 5.1 wraps stderr in `NativeCommandError` and corrupts `$?`.
+- `grok-fan.ps1` is the original Windows-native runner (PowerShell 5.1+), kept as a fallback for machines where Node scripts are unwelcome: same task contract, same `_summary.json`, same enforcement. Parameters: `-TasksFile` `-OutDir` `-DefaultCwd` `-MaxParallel` `-PermissionMode` `-TimeoutSec` `-DryRun`.
 
 ## Platform notes
 
-- The runner invokes the packaged node entrypoint, never `grok.cmd`/`grok.ps1` — the npm shims destroy the embedded quotes in `--json-schema`. Do not "simplify" this.
-- Never pipe grok through `2>&1` in PowerShell 5.1.
 - `grok --worktree` does nothing in headless mode; isolation comes from Workflow worktrees or disjoint file partitioning.
 - Grok Build reads the Claude `settings.json` for permissions and inherits its MCP servers.
 - Copies of this skill (per-harness installs, repo) must stay in step; source of truth: github.com/sauerlandtreffi/grok-w.

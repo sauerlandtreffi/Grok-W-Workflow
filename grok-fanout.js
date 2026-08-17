@@ -47,7 +47,7 @@
 //
 //   goal        (required) what to build / fix / refactor
 //   repo        (default '.') repo root, relative to the session cwd
-//   runner      absolute path to grok-fan.ps1. Required unless you filled in
+//   runner      absolute path to grok-fan.mjs. Required unless you filled in
 //               RUNNER_DEFAULT below when you installed the skill.
 //   maxWorkers  (default 6, cap 10) items per round — the runner throttles Grok at 10
 //   maxRounds   (default 2) re-plan + re-dispatch rounds for failed items
@@ -61,12 +61,13 @@
 // ============================================================================
 
 // ---- install setting ------------------------------------------------------
-// Absolute path to grok-fan.ps1, which lives next to this file. A Workflow script
+// Absolute path to grok-fan.mjs, which lives next to this file. A Workflow script
 // has no filesystem access and cannot discover its own location, so this cannot be
 // derived at runtime. Fill it in once when you install the skill, or pass
 // args.runner on every invocation.
-//   e.g. 'C:\\Users\\you\\.claude\\skills\\grok-w\\grok-fan.ps1'
-const RUNNER_DEFAULT = 'C:\\Users\\robin\\.claude\\skills\\grok-w\\grok-fan.ps1'
+//   e.g. '/home/you/.claude/skills/grok-w/grok-fan.mjs'
+//   or   'C:\\Users\\you\\.claude\\skills\\grok-w\\grok-fan.mjs'
+const RUNNER_DEFAULT = 'C:\\Users\\robin\\.claude\\skills\\grok-w\\grok-fan.mjs'
 
 // Standing rule, not a tunable: Grok always runs as grok-4.6 at xhigh.
 // xhigh is the top of grok's ladder — the CLI rejects 'max' with
@@ -285,16 +286,15 @@ const workerPrompt = (item, round) => [
   `]`,
   '```',
   ``,
-  `Run it (PowerShell, one call):`,
+  `Run it (one command, any platform):`,
   ``,
-  '```powershell',
-  `powershell -NoProfile -ExecutionPolicy Bypass -File "${RUNNER}" \``,
-  `  -TasksFile "<workdir>\\${item.id}.json" -OutDir "<workdir>\\${item.id}-out" \``,
-  `  -DefaultCwd "<worktree>" -Model ${GROK_MODEL} -Effort ${GROK_EFFORT} -MaxParallel 2`,
+  '```',
+  `node "${RUNNER}" --tasks-file "<workdir>/${item.id}.json" --out-dir "<workdir>/${item.id}-out" --default-cwd "<worktree>" --max-parallel 2`,
   '```',
   ``,
   `The runner defaults to --permission-mode auto, which is the ONLY mode where Grok's write and`,
   `run_terminal_command actually execute. Do not override it; it refuses writing modes under any other mode.`,
+  `Model and effort are pinned inside the runner (${GROK_MODEL} at ${GROK_EFFORT}); there is nothing to pass.`,
   ``,
   `## Step 2 — the verifier must be BLIND`,
   ``,
