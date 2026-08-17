@@ -56,6 +56,34 @@ Verified against `grok 1.0.4` / `grok-4.6` on Windows.
 - **A structurally blind verifier.** A second Grok run, scheduled `after` the writer in the same wave, that is never shown the writer's output — the runner does not feed a dependency's result into a dependent prompt. It judges disk state and the proof command only. *A verifier that has seen the writer's claims is not a verifier.*
 - **An independent diff review.** A fresh agent gets the spec and the diff, and deliberately *not* the worker's self-report. An empty or near-empty diff is a reject regardless of what any report says.
 
+## Map — how the tasks are put together
+
+```
+ORCHESTRATOR (the invoking agent) · scope → decompose → freeze specs → dispatch → verify → integrate
+  │
+  ├─ Shape 1 · single call     one-task wave — still gives _summary, suspect flag, sessionId
+  ├─ Shape 2 · swarm wave      ≤10 disjoint tasks, dependency-ordered — the workhorse
+  └─ Shape 3 · fanout pipeline (Workflow tool only) plan → harden specs
+                               → per item: Grok writer → blind Grok verifier → proof
+                               → independent diff review → accept / re-plan (≤2 rounds)
+  │
+  ▼
+wave.json = [ { id, prompt, mode: read|write|shell|full, cwd, after, afterAny,
+                schema, maxTurns, resumeSessionId, … } ]
+  │
+  ▼
+grok-fan.ps1 — ≤10 parallel `grok` processes, honours `after`, enforces auto + model pin
+  │            writer (mode full) ──after──► blind verifier (never sees writer's output)
+  ▼
+outdir/  _summary.json   status, numTurns, suspectNoToolCall, sessionId, costUSD — read FIRST
+         <id>.json       structuredOutput = the only field to parse
+         <id>.err.txt    _prompts/<id>.txt
+  │
+  ▼
+ORCHESTRATOR verifies: open the files, run the proof command itself.
+numTurns==1 ⇒ fabricated ⇒ corrective round via resumeSessionId (max 2, then stop delegating)
+```
+
 ## Install
 
 Requires the Grok Build CLI (`npm i -g @xai-official/grok`, then `grok login`), Node.js, and Windows PowerShell 5.1 or later.
@@ -120,6 +148,8 @@ See `SKILL.md` for the full field reference, the tool profiles, and the writer +
 ## Status
 
 The runner is tested: every status path, the dependency scheduler, the `auto` enforcement, cost accounting on non-zero exits, resume, and the writer + blind-verifier pattern end-to-end — including the negative case, where a deliberately truncated writer produced no file and the blind verifier returned `fail` with the real `MODULE_NOT_FOUND` output as its evidence.
+
+Re-validated live on 2026-08-17: on the very first probe task, Grok pressed its own narration into the schema at turn 1 without reading the target file — the runner flagged it `suspectNoToolCall`, and a corrective round via `resumeSessionId` then returned the character-exact answer at turn 2. The fabrication tell is not a hypothetical.
 
 `grok-fanout.js` parses cleanly and is built entirely from that verified mechanism, but the pipeline has not yet been run end-to-end. Treat it as unproven.
 

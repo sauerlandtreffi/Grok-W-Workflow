@@ -1,4 +1,4 @@
-export const meta = {
+﻿export const meta = {
   name: 'grok-fanout',
   description: 'Grok-W fan-out: the orchestrator freezes specs, Grok Build CLI subagents (grok-4.6 at xhigh) do the implementation work in parallel, every item is judged by a structurally blind Grok verifier plus an independent diff review, and failures are re-planned.',
   phases: [
@@ -66,7 +66,7 @@ export const meta = {
 // derived at runtime. Fill it in once when you install the skill, or pass
 // args.runner on every invocation.
 //   e.g. 'C:\\Users\\you\\.claude\\skills\\grok-w\\grok-fan.ps1'
-const RUNNER_DEFAULT = ''
+const RUNNER_DEFAULT = 'C:\\Users\\robin\\.claude\\skills\\grok-w\\grok-fan.ps1'
 
 // Standing rule, not a tunable: Grok always runs as grok-4.6 at xhigh.
 // xhigh is the top of grok's ladder — the CLI rejects 'max' with
@@ -409,10 +409,12 @@ for (let round = 1; round <= maxRounds; round++) {
       return agent(workerPrompt(item, round), o)
     },
     (worker, item) => {
+      // No worker result (skipped or died) — nothing to review; carry the item directly.
+      if (!worker) return { item, worker: null, review: null }
       // The reviewer gets the item and the branch — never the worker's claims.
       const o = { label: `review:${item.id}`, phase: 'Review', schema: REVIEW_SCHEMA }
-      return agent(reviewPrompt(item, worker && worker.branch), o)
-        .then(review => ({ item, worker: worker || null, review: review || null }))
+      return agent(reviewPrompt(item, worker.branch), o)
+        .then(review => ({ item, worker, review: review || null }))
     }
   )
 
@@ -469,3 +471,4 @@ return {
     ? 'Each accepted item is committed on its own worktree branch. Read every diff and merge deliberately — grok-fanout never merges or pushes.'
     : 'Changes are uncommitted in the working tree. Review the full diff before committing; items were kept disjoint by the planner, not by git.',
 }
+
