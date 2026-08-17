@@ -1,0 +1,27 @@
+[
+  {
+    "id": "add-module",
+    "mode": "full",
+    "cwd": "C:\\path\\to\\project",
+    "maxTurns": 30,
+    "prompt": "CONTEXT\n  Working directory: C:\\path\\to\\project\n  You own exactly one file: C:\\path\\to\\project\\add.js\n\nTASK\n  Create add.js as a CommonJS module that exports a function add(a, b) returning a + b.\n  Use: module.exports = { add }\n\nACCEPTANCE\n  This command must succeed from that directory:\n    node -e \"const m=require('./add.js'); if(m.add(2,3)!==5){process.exit(1)}\"\n\nOUTPUT\n  Plain text: the absolute path of the file you created.\n\nCONSTRAINTS\n  You must actually call the write tool. Create no other file.\n  If something is ambiguous, pick the most conservative reading - you cannot ask questions."
+  },
+  {
+    "id": "add-module-verify",
+    "mode": "shell",
+    "cwd": "C:\\path\\to\\project",
+    "after": "add-module",
+    "afterAny": true,
+    "maxTurns": 20,
+    "prompt": "CONTEXT\n  Working directory: C:\\path\\to\\project\n\nACCEPTANCE CRITERIA TO JUDGE\n  A CommonJS module add.js must exist in that directory and export a function add(a, b)\n  returning a + b.\n\nTASK\n  Inspect the working tree and run exactly this proof command with run_terminal_command:\n    node -e \"const m=require('./add.js'); if(m.add(2,3)!==5){process.exit(1)} console.log('PROOF OK')\"\n  Judge ONLY what you can observe: the files that are actually there, and the real exit\n  status and output of that command.\n\nOUTPUT\n  Match the required JSON schema. Put the literal command output in evidence.\n\nCONSTRAINTS\n  Report verdict \"fail\" if the module is absent, incomplete, or the proof command does not\n  pass. You have no information about how the work was done and must not assume it was done.",
+    "schema": {
+      "type": "object",
+      "required": ["verdict", "evidence"],
+      "properties": {
+        "verdict": { "type": "string", "enum": ["pass", "fail"] },
+        "evidence": { "type": "string" },
+        "filesActuallyChanged": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  }
+]

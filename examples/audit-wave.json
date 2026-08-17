@@ -1,0 +1,52 @@
+[
+  {
+    "id": "null-check-audit",
+    "mode": "read",
+    "cwd": "C:\\path\\to\\project",
+    "maxTurns": 30,
+    "prompt": "CONTEXT\n  Repo root: C:\\path\\to\\project\n  Your slice: everything under src\\combat\\\n  Read those files first. Do not go outside your slice.\n\nTASK\n  Find every place where damage is applied to a target without a null check on that target.\n\nACCEPTANCE\n  For each finding: the repo-relative file path, the 1-based line number, and the exact\n  expression copied character-for-character from the file. Line numbers and exact source\n  text cannot be guessed - they are the evidence that you actually read the code.\n\nOUTPUT\n  Match the required JSON schema.\n\nCONSTRAINTS\n  Do not modify any file. Do not run any command.\n  If something is ambiguous, state the ambiguity in a finding's expression field and pick\n  the most conservative reading - you cannot ask questions.",
+    "schema": {
+      "type": "object",
+      "required": ["findings"],
+      "properties": {
+        "findings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["file", "line", "expression"],
+            "properties": {
+              "file": { "type": "string" },
+              "line": { "type": "integer" },
+              "expression": { "type": "string" }
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "error-path-audit",
+    "mode": "read",
+    "cwd": "C:\\path\\to\\project",
+    "maxTurns": 30,
+    "prompt": "CONTEXT\n  Repo root: C:\\path\\to\\project\n  Your slice: everything under src\\net\\\n  Read those files first. Do not go outside your slice.\n\nTASK\n  Find every catch block that swallows an error without logging it or rethrowing.\n\nACCEPTANCE\n  For each finding: the repo-relative file path, the 1-based line number of the catch, and\n  the exact body of the catch block copied character-for-character.\n\nOUTPUT\n  Match the required JSON schema.\n\nCONSTRAINTS\n  Do not modify any file. Do not run any command.\n  If something is ambiguous, state it and pick the most conservative reading - you cannot\n  ask questions.",
+    "schema": {
+      "type": "object",
+      "required": ["findings"],
+      "properties": {
+        "findings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["file", "line", "expression"],
+            "properties": {
+              "file": { "type": "string" },
+              "line": { "type": "integer" },
+              "expression": { "type": "string" }
+            }
+          }
+        }
+      }
+    }
+  }
+]

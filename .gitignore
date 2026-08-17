@@ -1,0 +1,11 @@
+# Wave output directories produced by grok-fan.ps1
+*-out/
+wave-out/
+_prompts/
+_summary.json
+
+# OS / editor cruft
+Thumbs.db
+.DS_Store
+.vscode/
+.idea/
