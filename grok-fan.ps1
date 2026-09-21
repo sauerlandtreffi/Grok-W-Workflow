@@ -6,7 +6,7 @@
   Runs a dependency-ordered JSON array of Grok Build CLI tasks in parallel and writes
   one result file per task plus _summary.json. Doctrine, task-file contract and the
   measured Grok behaviour behind the defaults: see SKILL.md next to this file.
-  Model and effort are pinned (grok-4.6 at xhigh); per-task overrides are refused,
+  Model and effort use the Grok CLI defaults; per-task overrides are refused,
   and writing modes are refused unless the permission mode is 'auto'.
 
 .EXAMPLE
@@ -17,11 +17,6 @@ param(
     [Parameter(Mandatory = $true)][string]$TasksFile,
     [string]$OutDir,
     [ValidateRange(1, 10)][int]$MaxParallel = 10,
-    # Pinned by standing instruction: grok-4.6 at xhigh, never anything else.
-    # Kept as parameters so existing correct call sites keep working, but the
-    # ValidateSets make any other value a loud failure instead of a quiet downgrade.
-    [ValidateSet('grok-4.6')][string]$Model = 'grok-4.6',
-    [ValidateSet('xhigh')][string]$Effort = 'xhigh',
     [ValidateSet('auto', 'dontAsk', 'default', 'acceptEdits')][string]$PermissionMode = 'auto',
     [string]$DefaultCwd = (Get-Location).Path,
     [int]$TimeoutSec = 1800,
@@ -117,10 +112,10 @@ foreach ($t in $tasks) {
     # Refuse instead of ignore: a silently dropped override is exactly the class of
     # failure this runner exists to prevent.
     if ($null -ne $t.model) {
-        throw "Task '$($t.id)': per-task 'model' is not allowed. Grok-W runs grok-4.6 exclusively; remove the field."
+        throw "Task '$($t.id)': per-task 'model' is not allowed. Grok-W uses the Grok CLI default model; remove the field."
     }
     if ($null -ne $t.effort) {
-        throw "Task '$($t.id)': per-task 'effort' is not allowed. Grok-W runs at xhigh exclusively (the top of grok's ladder); remove the field."
+        throw "Task '$($t.id)': per-task 'effort' is not allowed. Grok-W uses the Grok CLI default reasoning effort; remove the field."
     }
     $seen[$t.id] = $true
 }
@@ -192,8 +187,6 @@ foreach ($t in $tasks) {
     elseif ($t.continueSession) { $argv.Add('--continue') }
     $argv.Add('--prompt-file'); $argv.Add($promptPath)
     $argv.Add('--cwd'); $argv.Add($cwd)
-    $argv.Add('--model'); $argv.Add($Model)
-    $argv.Add('--reasoning-effort'); $argv.Add($Effort)
     $argv.Add('--tools'); $argv.Add($tools)
     $argv.Add('--max-turns'); $argv.Add([string]$maxTurns)
     # Headless hygiene: never block on a prompt, never re-plan, never recurse.
@@ -233,7 +226,7 @@ if ($DryRun) {
 }
 
 # --- run with a concurrency throttle, honouring dependencies --------------------
-Write-Host "grok-w: $($plan.Count) task(s), max $MaxParallel parallel, model=$Model effort=$Effort perm=$PermissionMode"
+Write-Host "grok-w: $($plan.Count) task(s), max $MaxParallel parallel, model=CLI default effort=CLI default perm=$PermissionMode"
 Write-Host "grok-w: results -> $OutDir"
 
 $pending = New-Object System.Collections.ArrayList
@@ -382,8 +375,8 @@ foreach ($v in $results.Values) { if ($v.costUSD) { $totalCost += [double]$v.cos
 
 $summary = [pscustomobject]@{
     outDir         = $OutDir
-    model          = $Model
-    effort         = $Effort
+    model          = 'CLI default'
+    effort         = 'CLI default'
     permissionMode = $PermissionMode
     maxParallel    = $MaxParallel
     totalSeconds   = [math]::Round(((Get-Date) - $startedAt).TotalSeconds, 1)

@@ -4,7 +4,7 @@
 // Runs a dependency-ordered JSON array of Grok Build CLI tasks in parallel and
 // writes one result file per task plus _summary.json. Doctrine, task-file
 // contract and the measured Grok behaviour behind the defaults: see SKILL.md.
-// Model and effort are pinned (grok-4.6 at xhigh); per-task overrides are
+// Model and effort deliberately use the Grok CLI defaults. Per-task overrides
 // refused, and writing modes are refused unless the permission mode is 'auto'.
 //
 // Usage:
@@ -22,7 +22,7 @@ const WIN = process.platform === 'win32'
 // ---- CLI ------------------------------------------------------------------
 const opts = {
   tasksFile: null, outDir: null, defaultCwd: process.cwd(),
-  maxParallel: 10, model: 'grok-4.6', effort: 'xhigh',
+  maxParallel: 10,
   permissionMode: 'auto', timeoutSec: 1800, dryRun: false,
 }
 {
@@ -34,8 +34,6 @@ const opts = {
       case '--out-dir': opts.outDir = take(i); i++; break
       case '--default-cwd': opts.defaultCwd = take(i); i++; break
       case '--max-parallel': opts.maxParallel = parseInt(take(i), 10); i++; break
-      case '--model': opts.model = take(i); i++; break
-      case '--effort': opts.effort = take(i); i++; break
       case '--permission-mode': opts.permissionMode = take(i); i++; break
       case '--timeout-sec': opts.timeoutSec = parseInt(take(i), 10); i++; break
       case '--dry-run': opts.dryRun = true; break
@@ -45,10 +43,6 @@ const opts = {
 }
 function fail(msg) { console.error(`grok-fan: ${msg}`); process.exit(2) }
 
-// Pinned by standing instruction: grok-4.6 at xhigh, never anything else.
-// Accepting only these values makes a wrong call a loud failure, not a downgrade.
-if (opts.model !== 'grok-4.6') fail(`--model accepts only 'grok-4.6' (got '${opts.model}'). Grok-W runs grok-4.6 exclusively.`)
-if (opts.effort !== 'xhigh') fail(`--effort accepts only 'xhigh' (got '${opts.effort}'). xhigh is the top of grok's ladder.`)
 if (!['auto', 'dontAsk', 'default', 'acceptEdits'].includes(opts.permissionMode)) {
   fail(`--permission-mode must be auto|dontAsk|default|acceptEdits (got '${opts.permissionMode}').`)
 }
@@ -117,8 +111,8 @@ for (const t of tasks) {
   if (seen.has(t.id)) fail(`duplicate task id: ${t.id}`)
   // Refuse instead of ignore: a silently dropped override is exactly the class
   // of failure this runner exists to prevent.
-  if (t.model != null) fail(`task '${t.id}': per-task 'model' is not allowed. Grok-W runs grok-4.6 exclusively; remove the field.`)
-  if (t.effort != null) fail(`task '${t.id}': per-task 'effort' is not allowed. Grok-W runs at xhigh exclusively (the top of grok's ladder); remove the field.`)
+  if (t.model != null) fail(`task '${t.id}': per-task 'model' is not allowed. Grok-W uses the Grok CLI default model; remove the field.`)
+  if (t.effort != null) fail(`task '${t.id}': per-task 'effort' is not allowed. Grok-W uses the Grok CLI default reasoning effort; remove the field.`)
   seen.add(t.id)
 }
 
@@ -178,8 +172,6 @@ for (const t of tasks) {
   else if (t.continueSession) args.push('--continue')
   args.push('--prompt-file', promptPath)
   args.push('--cwd', cwd)
-  args.push('--model', opts.model)
-  args.push('--reasoning-effort', opts.effort)
   args.push('--tools', t.tools ? String(t.tools) : TOOL_PROFILES[mode])
   args.push('--max-turns', String(maxTurns))
   // Headless hygiene: never block on a prompt, never re-plan, never recurse.
@@ -208,7 +200,7 @@ if (opts.dryRun) {
 }
 
 // ---- run with a concurrency throttle, honouring dependencies --------------
-console.log(`grok-w: ${plan.length} task(s), max ${opts.maxParallel} parallel, model=${opts.model} effort=${opts.effort} perm=${opts.permissionMode}`)
+console.log(`grok-w: ${plan.length} task(s), max ${opts.maxParallel} parallel, model=CLI default effort=CLI default perm=${opts.permissionMode}`)
 console.log(`grok-w: results -> ${opts.outDir}`)
 
 const results = {}
@@ -327,7 +319,7 @@ while (pending.length > 0 || running.size > 0) {
 // Totals include failed and truncated tasks.
 const totalCost = Object.values(results).reduce((s, r) => s + (r.costUSD ? Number(r.costUSD) : 0), 0)
 const summary = {
-  outDir: opts.outDir, model: opts.model, effort: opts.effort,
+  outDir: opts.outDir, model: 'CLI default', effort: 'CLI default',
   permissionMode: opts.permissionMode, maxParallel: opts.maxParallel,
   totalSeconds: Math.round((Date.now() - startedAt) / 100) / 10,
   totalCostUSD: Math.round(totalCost * 1e5) / 1e5,

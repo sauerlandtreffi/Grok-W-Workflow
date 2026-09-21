@@ -1,6 +1,6 @@
 ---
 name: grok-w
-description: Grok Build CLI subagents do the labour (pinned grok-4.6 at xhigh); the invoking agent orchestrates and owns every judgement. Use whenever the user's message contains "Grok-W", "grok-w", "GrokW" or "/grok-w", any casing, anywhere. Shapes: single call, wave of up to 10 tasks via grok-fan.mjs, or the grok-fanout pipeline (Workflow tool).
+description: Grok Build CLI subagents do the labour (using the installed CLI's default model and reasoning effort); the invoking agent orchestrates and owns every judgement. Use whenever the user's message contains "Grok-W", "grok-w", "GrokW" or "/grok-w", any casing, anywhere. Shapes: single call, wave of up to 10 tasks via grok-fan.mjs, or the grok-fanout pipeline (Workflow tool).
 ---
 
 # Grok-W — orchestrated Grok fan-out
@@ -51,9 +51,9 @@ numTurns==1 ⇒ fabricated ⇒ corrective round via resumeSessionId (max 2, then
 6. **Resume works headless**: `resumeSessionId` keeps the session's context, so a corrective round states only what is wrong.
 7. **`xhigh` is the top of the effort ladder** — anything higher fails the run outright, no fallback.
 
-## The worker is fixed: grok-4.6 at xhigh
+## Select your model in Grok Build before running Grok-W
 
-Standing instruction, enforced by the runner: `--model`/`--effort` accept only these values, and per-task `model`/`effort` fields are **refused**. Never downgrade for "cheap mechanical" work.
+**Before starting a Grok-W wave, select the model and reasoning effort you want in Grok Build.** Grok-W intentionally omits `--model` and `--reasoning-effort`, so the installed Grok Build CLI uses its current configured defaults. Per-task `model`/`effort` fields are **refused**, keeping every task in a wave consistent. If a future CLI no longer supports defaults, use `grok-4.7` with `xhigh` as the explicit fallback.
 
 ## Hard rules
 
@@ -82,7 +82,7 @@ node <skill dir>/grok-fan.mjs \
   --default-cwd /path/to/project --max-parallel 10
 ```
 
-Options: `--permission-mode` (default `auto`; `dontAsk` only to harden a pure-read wave) · `--timeout-sec` (default 1800 per task) · `--dry-run` (print the exact command lines, spend nothing) · `--model`/`--effort` (accept only the pinned values — passing them is redundant, passing anything else fails) · env `GROK_ENTRY` overrides the grok-binary auto-detection. Exit 1 if any task did not end `ok` — read `_summary.json` regardless.
+Options: `--permission-mode` (default `auto`; `dontAsk` only to harden a pure-read wave) · `--timeout-sec` (default 1800 per task) · `--dry-run` (print the exact command lines, spend nothing) · env `GROK_ENTRY` overrides the grok-binary auto-detection. The runner intentionally has no model or effort option: select them in Grok Build before you start the wave. Exit 1 if any task did not end `ok` — read `_summary.json` regardless.
 
 ## Task file — a JSON array of task objects
 
@@ -96,7 +96,7 @@ Options: `--permission-mode` (default `auto`; `dontAsk` only to harden a pure-re
 | `schema` | JSON Schema → forces `structuredOutput` |
 | `resumeSessionId`, `continueSession` | corrective rounds (sessionId from `_summary.json`) |
 | `tools`, `rules`, `permissionMode`, `allowSubagents` | overrides; writing modes must stay `auto` |
-| `model`, `effort` | **refused** — grok-4.6 at xhigh, always |
+| `model`, `effort` | **refused** — select the Grok Build defaults before starting the wave |
 
 Tool profiles: `read` = `read_file,list_dir,grep` · `write` = + `write,search_replace` · `shell` = read + `run_terminal_command` · `full` = all. `write`/`shell`/`full` need `auto`.
 
@@ -133,7 +133,7 @@ Workflow({ scriptPath: '<skill dir>/grok-fanout.js',
            args: { goal: '<what to build>', repo: '.', maxWorkers: 6, isolation: 'worktree' } })
 ```
 
-args: `goal` (required) · `repo` ('.') · `maxWorkers` (6, cap 10) · `maxRounds` (2) · `isolation` (`worktree`; **`none` outside a git repo**) · `specReview` (true). No argument selects the orchestrator or the Grok model/effort — thinking agents inherit the calling session, Grok is pinned. `grok-fanout.js` needs `RUNNER_DEFAULT` (or `args.runner`) set to the absolute path of `grok-fan.mjs`. Without a `Workflow` tool, run the equivalent by hand: freeze specs, dispatch writer + blind-verifier waves, review each diff yourself.
+args: `goal` (required) · `repo` ('.') · `maxWorkers` (6, cap 10) · `maxRounds` (2) · `isolation` (`worktree`; **`none` outside a git repo**) · `specReview` (true). No argument selects the orchestrator or Grok model/effort — thinking agents inherit the calling session and Grok uses the defaults you selected in Grok Build before starting the wave. `grok-fanout.js` needs `RUNNER_DEFAULT` (or `args.runner`) set to the absolute path of `grok-fan.mjs`. Without a `Workflow` tool, run the equivalent by hand: freeze specs, dispatch writer + blind-verifier waves, review each diff yourself.
 
 ## Windows
 

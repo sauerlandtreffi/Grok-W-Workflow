@@ -27,7 +27,7 @@
 //   specReview  (default true) adversarial spec pass
 //
 // No argument selects who orchestrates: thinking agents inherit the calling
-// session's model; Grok is pinned.
+// session's model; Grok uses its CLI defaults.
 // ============================================================================
 
 // ---- install setting ------------------------------------------------------
@@ -39,12 +39,11 @@
 //   or   'C:\\Users\\you\\.claude\\skills\\grok-w\\grok-fan.mjs'
 const RUNNER_DEFAULT = 'C:\\Users\\robin\\.claude\\skills\\grok-w\\grok-fan.mjs'
 
-// Standing rule, not a tunable: Grok always runs as grok-4.6 at xhigh.
-// xhigh is the top of grok's ladder — the CLI rejects 'max' with
-// "unknown effort level 'max'; use one of: xhigh, high, medium, low".
-// The runner pins the same values and refuses per-task overrides.
-const GROK_MODEL = 'grok-4.6'
-const GROK_EFFORT = 'xhigh'
+// Standing rule: omit model and effort flags so the installed Grok CLI selects
+// its configured defaults. The runner still refuses per-task overrides, keeping
+// every task in a wave consistent.
+const GROK_MODEL = 'CLI default'
+const GROK_EFFORT = 'CLI default'
 
 // ---------- input ----------
 const input = typeof args === 'string' ? { goal: args } : (args || {})
@@ -221,7 +220,7 @@ const workerPrompt = (item, round) => [
   ``,
   `## Why you cannot take Grok's word for anything`,
   ``,
-  `Measured on grok-4.6, not hypothetical: it returns schema-valid success reports for work it never did.`,
+  `Measured on Grok Build, not hypothetical: it returns schema-valid success reports for work it never did.`,
   `A write task reported the file and content it had "written" with stopReason "end_turn" while nothing`,
   `reached the disk. The mechanical tell is numTurns == 1 — a task that needed a tool call but took one turn`,
   `answered from prior knowledge. The runner surfaces this as suspectNoToolCall.`,
@@ -263,7 +262,7 @@ const workerPrompt = (item, round) => [
   ``,
   `The runner defaults to --permission-mode auto, which is the ONLY mode where Grok's write and`,
   `run_terminal_command actually execute. Do not override it; it refuses writing modes under any other mode.`,
-  `Model and effort are pinned inside the runner (${GROK_MODEL} at ${GROK_EFFORT}); there is nothing to pass.`,
+  `Model and effort are selected by the installed Grok CLI (${GROK_MODEL}); there is nothing to pass.`,
   ``,
   `## Step 2 — the verifier must be BLIND`,
   ``,
@@ -337,7 +336,7 @@ const reviewPrompt = (item, branch) => [
 ].join('\n')
 
 // ---------- orchestrator ----------
-log(`grok-fanout: goal on ${repo} | workers=Grok ${GROK_MODEL}@${GROK_EFFORT} (pinned) | isolation=${isolation} | cap=${cap}`)
+log(`grok-fanout: goal on ${repo} | workers=Grok CLI defaults | isolation=${isolation} | cap=${cap}`)
 
 const accepted = []
 let carry = []

@@ -15,7 +15,7 @@ Then you are meant to be the **orchestrator**. Do this, in order:
    `node grok-fan.mjs --tasks-file wave.json --out-dir wave-out --default-cwd /path/to/project`.
 5. **Verify before you believe**: read `wave-out/_summary.json` first; a task with `suspectNoToolCall: true` (or `numTurns: 1` where a tool call was needed) is fabricated until you prove otherwise, and every claim you act on must be checked against the real files by you.
 
-The model and effort are pinned — `grok-4.6` at `xhigh`, enforced by the runner. There is nothing to configure and nothing to choose.
+**Before starting a Grok-W wave, select the model and reasoning effort you want in Grok Build.** Grok-W intentionally does not pass `--model` or `--reasoning-effort`; it uses the current defaults of your installed Grok Build CLI. The runner refuses per-task overrides so that every task in a wave uses the same selection. If a future CLI no longer supports defaults, use `grok-4.7` with `xhigh` as the explicit fallback.
 
 ## Why the verification matters
 
@@ -47,7 +47,7 @@ Each of these was reproduced against real state, and each one silently breaks a 
 | **`xhigh` is the top of the reasoning ladder.** `max` and `ultra` are rejected: `unknown effort level 'max'; use one of: xhigh, high, medium, low`. | Asking for more fails the run outright; it does not fall back. |
 | **Resume works headless and keeps context.** `--resume <sessionId>` with `--prompt-file` continues the session — it recalled a file it had created without being told the path again. | Corrective rounds state only what is wrong, not the whole task again. |
 
-Verified against `grok 1.0.4` / `grok-4.6` on Windows.
+The verification behaviour was measured with `grok 1.0.4` on Windows; model selection is now intentionally delegated to the installed Grok Build CLI.
 
 ## What is in here
 
@@ -86,7 +86,7 @@ wave.json = [ { id, prompt, mode: read|write|shell|full, cwd, after, afterAny,
                 schema, maxTurns, resumeSessionId, … } ]
   │
   ▼
-grok-fan.mjs — ≤10 parallel `grok` processes, honours `after`, enforces auto + model pin
+grok-fan.mjs — ≤10 parallel `grok` processes, honours `after`, enforces auto + CLI defaults
   │            writer (mode full) ──after──► blind verifier (never sees writer's output)
   ▼
 outdir/  _summary.json   status, numTurns, suspectNoToolCall, sessionId, costUSD — read FIRST
@@ -116,8 +116,8 @@ numTurns==1 ⇒ fabricated ⇒ corrective round via resumeSessionId (max 2, then
 │
 └───────────────────────────┬────────────────────────────────────────────────
                             │   the ONLY crossing point:
-                            │   wave.json ▼ · results ▲   (grok-fan.mjs, model pinned)
-┌───────────────────────────┴─ GROK SIDE — grok-4.6 @ xhigh ─────────────────
+                            │   wave.json ▼ · results ▲   (grok-fan.mjs, CLI defaults)
+┌───────────────────────────┴─ GROK SIDE — model and effort selected in Grok Build ─────────────────
 │
 │     GROK WRITER / WORKER ×≤10   reads · implements the spec · scoped commands
 │     GROK BLIND VERIFIER         sees only disk state + the proof command
