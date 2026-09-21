@@ -41,7 +41,7 @@ ORCHESTRATOR verifies: open the files, run the proof yourself.
 numTurns==1 ⇒ fabricated ⇒ corrective round via resumeSessionId (max 2, then do it yourself)
 ```
 
-## Measured behaviour (grok 1.0.4 / grok-4.6 — evidence in the repo README)
+## Measured behaviour (Grok Build CLI 1.0.4 — evidence in the repo README)
 
 1. **`--permission-mode auto` is mandatory** for anything that writes or runs commands. Every other mode *cancels* the tool call silently (turn 1, exit 0, no stderr) while the task reports success. The runner refuses `write`/`shell`/`full` under any other mode.
 2. **Fabrication is real; `numTurns == 1` is the tell.** Grok invents schema-valid answers rather than call a tool. `status: ok` and a populated `structuredOutput` carry no information; the runner flags this as `suspectNoToolCall`. Defence: ask for what cannot be guessed — exact line numbers, exact strings, real command output.
